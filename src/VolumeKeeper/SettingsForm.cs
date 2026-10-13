@@ -15,6 +15,7 @@ internal sealed class SettingsForm : Form
     private readonly PrivateFontCollection _fontCollection = new();
     private readonly Dictionary<float, Font> _fonts = new();
     private GCHandle _fontData;
+    private IntPtr _gdiFontResource;
     private readonly Label _device;
     private readonly Label _volume;
     private readonly Label _saved;
@@ -50,12 +51,6 @@ internal sealed class SettingsForm : Form
         FormBorderStyle = FormBorderStyle.Sizable;
         MaximizeBox = true;
         KeyPreview = true;
-        var working = Screen.FromPoint(Cursor.Position).WorkingArea;
-        MinimumSize = new Size(Math.Min(800, working.Width), Math.Min(660, working.Height));
-        Size = new Size(Math.Min(1180, working.Width), Math.Min(800, working.Height));
-        StartPosition = FormStartPosition.Manual;
-        Location = new Point(working.Left + (working.Width - Width) / 2,
-            working.Top + (working.Height - Height) / 2);
 
         _device = Label(16, ContentAlignment.MiddleLeft);
         _device.AutoEllipsis = true;
@@ -77,11 +72,11 @@ internal sealed class SettingsForm : Form
             Font = DotFont(11)
         };
         _profiles.Columns.Add("機器", 500);
-        _profiles.Columns.Add("保存音量", 145);
+        _profiles.Columns.Add("保存音量", 180);
         _profiles.Resize += (_, _) => ResizeProfileColumns();
         _profileVolume = new NumericUpDown
         {
-            Size = new Size(90, 40),
+            Size = new Size(90, Math.Max(44, DotFont(12).Height + 14)),
             Minimum = 0,
             Maximum = 100,
             Enabled = false,
@@ -97,6 +92,30 @@ internal sealed class SettingsForm : Form
         _paused = CheckBox("自動適用を一時停止");
         _startup = CheckBox("Windows ログイン時に起動");
 
+        var titleHeight = DotFont(24).Height + 16;
+        var subtitleHeight = DotFont(11).Height + 12;
+        var headerHeight = titleHeight + subtitleHeight + 12;
+        var currentTitleHeight = DotFont(11).Height + 12;
+        var currentBottomHeight = Math.Max(_saveCurrent.Height, DotFont(12).Height) + 10;
+        var currentHeight = 43 + currentTitleHeight +
+            Math.Max(DotFont(16).Height, DotFont(19).Height) + 18 + currentBottomHeight;
+        var profilesTitleHeight = DotFont(14).Height + 12;
+        var actionsHeight = Math.Max(_profileVolume.Height, _saveProfile.Height) + 18;
+        var optionsHeight = Math.Max(64, DotFont(11).Height + 24) + 14;
+        var statusHeight = DotFont(11).Height + 20;
+        var working = Screen.FromPoint(Cursor.Position).WorkingArea;
+        var minimumWidth = Math.Max(840,
+            _profileVolume.Width + 30 + _saveProfile.Width + _deleteProfile.Width + 150);
+        var minimumHeight = headerHeight + currentHeight + optionsHeight + statusHeight +
+            profilesTitleHeight + actionsHeight + 110;
+        MinimumSize = new Size(Math.Min(minimumWidth, working.Width),
+            Math.Min(minimumHeight, working.Height));
+        Size = new Size(Math.Min(Math.Max(1180, minimumWidth), working.Width),
+            Math.Min(Math.Max(800, minimumHeight), working.Height));
+        StartPosition = FormStartPosition.Manual;
+        Location = new Point(working.Left + (working.Width - Width) / 2,
+            working.Top + (working.Height - Height) / 2);
+
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -106,19 +125,19 @@ internal sealed class SettingsForm : Form
             BackColor = Sky
         };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 190));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, headerHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, currentHeight));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 82));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, optionsHeight));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, statusHeight));
         Controls.Add(root);
 
         var header = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 2, Margin = new Padding(0, 0, 0, 12) };
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 75));
         header.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25));
-        header.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        header.RowStyles.Add(new RowStyle(SizeType.Absolute, titleHeight));
         header.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        header.Controls.Add(Label(25, ContentAlignment.MiddleLeft, "VOLUMEKEEPER"), 0, 0);
+        header.Controls.Add(Label(24, ContentAlignment.MiddleLeft, "VOLUMEKEEPER"), 0, 0);
         header.Controls.Add(Label(10, ContentAlignment.MiddleRight, "F11 全画面 / Esc 戻る"), 1, 0);
         header.Controls.Add(Label(11, ContentAlignment.TopLeft, "出力先ごとに、いつもの音量を。"), 0, 1);
         root.Controls.Add(header, 0, 0);
@@ -133,9 +152,9 @@ internal sealed class SettingsForm : Form
         };
         currentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         currentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
-        currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 32));
+        currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, currentTitleHeight));
         currentLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 46));
+        currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, currentBottomHeight));
         currentLayout.Controls.Add(Label(11, ContentAlignment.MiddleLeft, "● 現在の出力先"), 0, 0);
         currentLayout.Controls.Add(_device, 0, 1);
         currentLayout.Controls.Add(_saved, 0, 2);
@@ -154,14 +173,16 @@ internal sealed class SettingsForm : Form
             RowCount = 3
         };
         profilesLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        profilesLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
+        profilesLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, profilesTitleHeight));
         profilesLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        profilesLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, 58));
+        profilesLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, actionsHeight));
         profilesLayout.Controls.Add(Label(14, ContentAlignment.MiddleLeft, "保存済みの機器"), 0, 0);
         profilesLayout.Controls.Add(_profiles, 0, 1);
         var actions = new FlowLayoutPanel { Dock = DockStyle.Fill, WrapContents = false, Padding = new Padding(0, 10, 0, 0) };
         actions.Controls.Add(_profileVolume);
-        actions.Controls.Add(new Label { Text = "%", Font = DotFont(12), ForeColor = Ink, Size = new Size(30, 40), TextAlign = ContentAlignment.MiddleLeft });
+        actions.Controls.Add(new Label { Text = "%", Font = DotFont(12), ForeColor = Ink,
+            Size = new Size(30, _profileVolume.Height), TextAlign = ContentAlignment.MiddleLeft,
+            UseCompatibleTextRendering = true });
         actions.Controls.Add(_saveProfile);
         actions.Controls.Add(_deleteProfile);
         profilesLayout.Controls.Add(actions, 0, 2);
@@ -272,8 +293,9 @@ internal sealed class SettingsForm : Form
     private void ResizeProfileColumns()
     {
         if (_profiles.Columns.Count < 2) return;
-        _profiles.Columns[1].Width = 145;
-        _profiles.Columns[0].Width = Math.Max(180, _profiles.ClientSize.Width - 150);
+        var volumeWidth = Math.Max(180, TextRenderer.MeasureText("保存音量", _profiles.Font).Width + 40);
+        _profiles.Columns[1].Width = volumeWidth;
+        _profiles.Columns[0].Width = Math.Max(180, _profiles.ClientSize.Width - volumeWidth - 6);
     }
 
     private void ToggleFullscreen()
@@ -307,6 +329,11 @@ internal sealed class SettingsForm : Form
         var bytes = buffer.ToArray();
         _fontData = GCHandle.Alloc(bytes, GCHandleType.Pinned);
         _fontCollection.AddMemoryFont(_fontData.AddrOfPinnedObject(), bytes.Length);
+        // ListView and NumericUpDown render through GDI, so they also need a GDI font resource.
+        _gdiFontResource = AddFontMemResourceEx(_fontData.AddrOfPinnedObject(),
+            (uint)bytes.Length, IntPtr.Zero, out var fontCount);
+        if (_gdiFontResource == IntPtr.Zero || fontCount == 0)
+            throw new InvalidOperationException("ドットフォントを Windows に登録できません。");
     }
 
     private Font DotFont(float size)
@@ -326,21 +353,30 @@ internal sealed class SettingsForm : Form
         TextAlign = align,
         ForeColor = Ink,
         Font = DotFont(size),
-        Margin = Padding.Empty
+        Margin = Padding.Empty,
+        UseCompatibleTextRendering = true
     };
 
-    private Button Button(string text, int width, bool secondary = false) => new()
+    private Button Button(string text, int width, bool secondary = false)
     {
-        Text = text,
-        Size = new Size(width, 40),
-        FlatStyle = FlatStyle.Flat,
-        BackColor = secondary ? Color.White : Accent,
-        ForeColor = secondary ? Ink : Color.White,
-        Font = DotFont(11),
-        Cursor = Cursors.Hand,
-        Margin = new Padding(0, 0, 12, 0),
-        UseVisualStyleBackColor = false
-    };
+        var font = DotFont(11);
+        var measuredWidth = TextRenderer.MeasureText(text, font).Width + 32;
+        var button = new Button
+        {
+            Text = text,
+            Size = new Size(Math.Max(width, measuredWidth), Math.Max(44, font.Height + 14)),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = secondary ? Color.White : Accent,
+            ForeColor = secondary ? Ink : Color.White,
+            Font = font,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 12, 0),
+            UseVisualStyleBackColor = false,
+            UseCompatibleTextRendering = true
+        };
+        button.FlatAppearance.BorderColor = secondary ? Border : Accent;
+        return button;
+    }
 
     private CheckBox CheckBox(string text) => new()
     {
@@ -349,7 +385,8 @@ internal sealed class SettingsForm : Form
         ForeColor = Ink,
         Font = DotFont(11),
         AutoSize = false,
-        Padding = new Padding(4, 0, 0, 0)
+        Padding = new Padding(4, 0, 0, 0),
+        UseCompatibleTextRendering = true
     };
 
     private static int Percent(float level) => (int)Math.Round(level * 100, MidpointRounding.AwayFromZero);
@@ -362,10 +399,19 @@ internal sealed class SettingsForm : Form
             base.Dispose(disposing);
             foreach (var font in _fonts.Values) font.Dispose();
             _fontCollection.Dispose();
+            if (_gdiFontResource != IntPtr.Zero) RemoveFontMemResourceEx(_gdiFontResource);
             if (_fontData.IsAllocated) _fontData.Free();
         }
         else base.Dispose(disposing);
     }
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    private static extern IntPtr AddFontMemResourceEx(
+        IntPtr fontData, uint fontSize, IntPtr reserved, out uint fontCount);
+
+    [DllImport("gdi32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveFontMemResourceEx(IntPtr resourceHandle);
 
     private sealed class SurfacePanel : Panel
     {
