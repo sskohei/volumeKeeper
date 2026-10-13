@@ -12,6 +12,8 @@ Windows 11 で、通常の再生用の出力機器ごとにマスター音量を
 
 設定は `%LOCALAPPDATA%\VolumeKeeper\settings.json` に保存されます。
 
+設定画面は大きめのサイズで開き、ウィンドウ端のドラッグや最大化ボタンで広げられます。`F11` で全画面表示、`Esc` で元のサイズに戻ります。画面の文字には、アプリに同梱した [DotGothic16](https://github.com/fontworks-fonts/DotGothic16) を使用しています（[SIL Open Font License 1.1](src/VolumeKeeper/Fonts/OFL.txt)）。
+
 ## ビルド
 
 .NET 10 SDK を使用します。Windows 11 で次を実行してください。
@@ -20,7 +22,7 @@ Windows 11 で、通常の再生用の出力機器ごとにマスター音量を
 dotnet publish src/VolumeKeeper/VolumeKeeper.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
 ```
 
-`publish\VolumeKeeper.exe` を実行します。GitHub Actions の Windows ビルドでも配布用の実行ファイルを生成します。
+`publish\VolumeKeeper.exe` を実行します。配布時は同じフォルダーの `Fonts\OFL.txt` も同梱してください。GitHub Actions の Windows ビルドでも配布用の実行ファイルを生成します。
 
 設定ロジックの確認:
 

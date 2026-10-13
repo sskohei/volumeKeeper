@@ -65,7 +65,8 @@ internal sealed class KeeperContext : ApplicationContext
     private void ShowWindow()
     {
         _form.Show();
-        _form.WindowState = FormWindowState.Normal;
+        if (_form.WindowState == FormWindowState.Minimized)
+            _form.WindowState = FormWindowState.Normal;
         _form.Activate();
     }
 

@@ -9,4 +9,8 @@
     <AssemblyName>VolumeKeeper</AssemblyName>
     <RootNamespace>VolumeKeeper</RootNamespace>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Fonts/DotGothic16-Regular.ttf" />
+    <None Update="Fonts/OFL.txt" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
