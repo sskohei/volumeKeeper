@@ -24,6 +24,7 @@ internal sealed class KeeperContext : ApplicationContext
         _form = new SettingsForm();
         _form.FormClosing += OnFormClosing;
         _form.SaveCurrentRequested += SaveCurrent;
+        _form.ApplyCurrentRequested += ApplyCurrentVolume;
         _form.SaveProfileRequested += SaveProfile;
         _form.DeleteProfileRequested += DeleteProfile;
         _form.PauseChanged += SetPaused;
@@ -121,7 +122,7 @@ internal sealed class KeeperContext : ApplicationContext
             }
             else if (!changed && current is not null && previousVolume.HasValue &&
                      string.Equals(previousId, current.EndpointId, StringComparison.Ordinal) &&
-                     Math.Abs(current.Volume - previousVolume.Value) > 0.0005f)
+                     Math.Abs(current.Volume - previousVolume.Value) > VolumePolicy.ChangeTolerance)
             {
                 // Catch a change if its COM notification was missed or is still queued.
                 _settings.Save(current, current.Volume);
@@ -156,8 +157,8 @@ internal sealed class KeeperContext : ApplicationContext
             ScheduleSwitch();
             return;
         }
-        if (Math.Abs(current.Volume - level) > 0.005f) return; // An older queued notification.
-        var volumeChanged = Math.Abs(level - previousVolume) > 0.0005f;
+        if (Math.Abs(current.Volume - level) > VolumePolicy.ChangeTolerance) return; // An older queued notification.
+        var volumeChanged = Math.Abs(level - previousVolume) > VolumePolicy.ChangeTolerance;
         current.Muted = muted;
         if (!ours && volumeChanged)
         {
@@ -175,6 +176,25 @@ internal sealed class KeeperContext : ApplicationContext
         _settings.Save(current, current.Volume);
         ScheduleSave();
         _status = "現在の音量を保存しました。";
+        UpdateView();
+    }
+
+    private void ApplyCurrentVolume(float level)
+    {
+        var current = _audio?.Current;
+        if (current is null) return;
+        try
+        {
+            _audio!.SetVolume(level);
+            // Save the actual level reported by the device, which may have coarser steps.
+            _settings.Save(current, current.Volume);
+            ScheduleSave();
+            _status = $"音量 {VolumePercent.Format(current.Volume)}% を適用して保存しました。";
+        }
+        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            _status = $"{current.Name} の音量を変更できません: {error.Message}";
+        }
         UpdateView();
     }
 

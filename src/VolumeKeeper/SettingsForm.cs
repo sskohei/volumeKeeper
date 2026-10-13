@@ -21,6 +21,8 @@ internal sealed class SettingsForm : Form
     private readonly Label _saved;
     private readonly Label _status;
     private readonly ListView _profiles;
+    private readonly NumericUpDown _currentVolume;
+    private readonly Button _applyCurrent;
     private readonly NumericUpDown _profileVolume;
     private readonly Button _saveProfile;
     private readonly Button _deleteProfile;
@@ -34,6 +36,7 @@ internal sealed class SettingsForm : Form
     private FormWindowState _previousWindowState;
 
     public event Action? SaveCurrentRequested;
+    public event Action<float>? ApplyCurrentRequested;
     public event Action<DeviceProfile, float>? SaveProfileRequested;
     public event Action<DeviceProfile>? DeleteProfileRequested;
     public event Action<bool>? PauseChanged;
@@ -74,18 +77,10 @@ internal sealed class SettingsForm : Form
         _profiles.Columns.Add("機器", 500);
         _profiles.Columns.Add("保存音量", 180);
         _profiles.Resize += (_, _) => ResizeProfileColumns();
-        _profileVolume = new NumericUpDown
-        {
-            Size = new Size(90, Math.Max(44, DotFont(12).Height + 14)),
-            Minimum = 0,
-            Maximum = 100,
-            Enabled = false,
-            Font = DotFont(12),
-            BackColor = Color.White,
-            ForeColor = Ink,
-            TextAlign = HorizontalAlignment.Center,
-            Margin = new Padding(0, 3, 4, 0)
-        };
+        _currentVolume = VolumeInput();
+        _applyCurrent = Button("音量を適用して保存", 220);
+        _applyCurrent.Enabled = false;
+        _profileVolume = VolumeInput();
         _saveProfile = Button("保存音量を変更", 185);
         _deleteProfile = Button("選択した設定を削除", 220, secondary: true);
         _saveCurrent = Button("現在の音量を保存", 210);
@@ -97,8 +92,10 @@ internal sealed class SettingsForm : Form
         var headerHeight = titleHeight + subtitleHeight + 12;
         var currentTitleHeight = DotFont(11).Height + 12;
         var currentBottomHeight = Math.Max(_saveCurrent.Height, DotFont(12).Height) + 10;
+        var currentFineHeight = Math.Max(_currentVolume.Height, _applyCurrent.Height) + 12;
         var currentHeight = 43 + currentTitleHeight +
-            Math.Max(DotFont(16).Height, DotFont(19).Height) + 18 + currentBottomHeight;
+            Math.Max(DotFont(16).Height, DotFont(19).Height) + 18 +
+            currentBottomHeight + currentFineHeight;
         var profilesTitleHeight = DotFont(14).Height + 12;
         var actionsHeight = Math.Max(_profileVolume.Height, _saveProfile.Height) + 18;
         var optionsHeight = Math.Max(64, DotFont(11).Height + 24) + 14;
@@ -148,19 +145,48 @@ internal sealed class SettingsForm : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(22, 13, 22, 16),
             ColumnCount = 2,
-            RowCount = 3
+            RowCount = 4
         };
         currentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 63));
         currentLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 37));
         currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, currentTitleHeight));
         currentLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, currentBottomHeight));
+        currentLayout.RowStyles.Add(new RowStyle(SizeType.Absolute, currentFineHeight));
         currentLayout.Controls.Add(Label(11, ContentAlignment.MiddleLeft, "● 現在の出力先"), 0, 0);
         currentLayout.Controls.Add(_device, 0, 1);
         currentLayout.Controls.Add(_saved, 0, 2);
         currentLayout.Controls.Add(_volume, 1, 1);
         _saveCurrent.Dock = DockStyle.Right;
         currentLayout.Controls.Add(_saveCurrent, 1, 2);
+        var currentFine = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            WrapContents = false,
+            Padding = new Padding(0, 8, 0, 0)
+        };
+        currentFine.Controls.Add(new Label
+        {
+            Text = "現在の音量を調整",
+            Font = DotFont(11),
+            ForeColor = Ink,
+            Size = new Size(190, _currentVolume.Height),
+            TextAlign = ContentAlignment.MiddleLeft,
+            UseCompatibleTextRendering = true
+        });
+        currentFine.Controls.Add(_currentVolume);
+        currentFine.Controls.Add(new Label
+        {
+            Text = "%（0.01%刻み）",
+            Font = DotFont(11),
+            ForeColor = Ink,
+            Size = new Size(150, _currentVolume.Height),
+            TextAlign = ContentAlignment.MiddleLeft,
+            UseCompatibleTextRendering = true
+        });
+        currentFine.Controls.Add(_applyCurrent);
+        currentLayout.Controls.Add(currentFine, 0, 3);
+        currentLayout.SetColumnSpan(currentFine, 2);
         currentCard.Controls.Add(currentLayout);
         root.Controls.Add(currentCard, 0, 1);
 
@@ -206,6 +232,8 @@ internal sealed class SettingsForm : Form
         root.Controls.Add(status, 0, 4);
 
         _saveCurrent.Click += (_, _) => SaveCurrentRequested?.Invoke();
+        _applyCurrent.Click += (_, _) =>
+            ApplyCurrentRequested?.Invoke((float)_currentVolume.Value / 100f);
         _profiles.SelectedIndexChanged += (_, _) => UpdateSelection();
         _saveProfile.Click += (_, _) =>
         {
@@ -246,16 +274,24 @@ internal sealed class SettingsForm : Form
         _refreshing = true;
         try
         {
+            var editingCurrent = _currentVolume.ContainsFocus &&
+                string.Equals(_device.Tag as string, current?.EndpointId, StringComparison.Ordinal);
+            _device.Tag = current?.EndpointId;
             _device.Text = current?.Name ?? "出力先がありません";
             _deviceTip.SetToolTip(_device, current?.Name ?? "");
             _volume.Text = current is null ? "音量 —" :
-                $"音量 {Percent(current.Volume)}%{(current.Muted ? "（ミュート中）" : "")}";
+                $"音量 {VolumePercent.Format(current.Volume)}%{(current.Muted ? "（ミュート中）" : "")}";
             _saved.Text = current is null ? "保存音量 —" : currentProfile is null ?
-                "保存音量 未登録" : $"保存音量 {Percent(currentProfile.Volume)}%";
+                "保存音量 未登録" : $"保存音量 {VolumePercent.Format(currentProfile.Volume)}%";
             _saveCurrent.Enabled = current is not null;
+            _currentVolume.Enabled = current is not null;
+            _applyCurrent.Enabled = current is not null;
+            if (current is not null && !editingCurrent)
+                _currentVolume.Value = VolumePercent.ToDecimal(current.Volume);
             _status.Text = $"● {status}";
 
             var selected = SelectedProfile;
+            var editingProfile = _profileVolume.ContainsFocus ? _profileVolume.Value : (decimal?)null;
             _profiles.BeginUpdate();
             try
             {
@@ -263,7 +299,7 @@ internal sealed class SettingsForm : Form
                 foreach (var profile in profiles.OrderBy(p => p.Name, StringComparer.CurrentCulture))
                 {
                     var item = new ListViewItem(profile.Name) { Tag = profile };
-                    item.SubItems.Add($"{Percent(profile.Volume)}%");
+                    item.SubItems.Add($"{VolumePercent.Format(profile.Volume)}%");
                     _profiles.Items.Add(item);
                     if (ReferenceEquals(profile, selected)) item.Selected = true;
                 }
@@ -273,6 +309,8 @@ internal sealed class SettingsForm : Form
             _paused.Checked = paused;
             _startup.Checked = startup;
             UpdateSelection();
+            if (editingProfile.HasValue && ReferenceEquals(SelectedProfile, selected))
+                _profileVolume.Value = editingProfile.Value;
         }
         finally { _refreshing = false; }
     }
@@ -287,7 +325,7 @@ internal sealed class SettingsForm : Form
         _saveProfile.Enabled = profile is not null;
         _deleteProfile.Enabled = profile is not null;
         if (profile is not null)
-            _profileVolume.Value = Math.Clamp(Percent(profile.Volume), 0, 100);
+            _profileVolume.Value = VolumePercent.ToDecimal(profile.Volume);
     }
 
     private void ResizeProfileColumns()
@@ -389,7 +427,20 @@ internal sealed class SettingsForm : Form
         UseCompatibleTextRendering = true
     };
 
-    private static int Percent(float level) => (int)Math.Round(level * 100, MidpointRounding.AwayFromZero);
+    private NumericUpDown VolumeInput() => new()
+    {
+        Size = new Size(110, Math.Max(44, DotFont(12).Height + 14)),
+        Minimum = 0,
+        Maximum = 100,
+        DecimalPlaces = 2,
+        Increment = 0.01m,
+        Enabled = false,
+        Font = DotFont(12),
+        BackColor = Color.White,
+        ForeColor = Ink,
+        TextAlign = HorizontalAlignment.Center,
+        Margin = new Padding(0, 3, 4, 0)
+    };
 
     protected override void Dispose(bool disposing)
     {

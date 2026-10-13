@@ -34,6 +34,12 @@ Assert(!VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "speaker", false
     "音声サービスの再接続では保存音量を再適用しない");
 Assert(!VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "headphones", true),
     "一時停止中は保存音量を適用しない");
+Assert(VolumePercent.ToDecimal(0.0001f) == 0.01m, "1%未満を正確に表示する");
+Assert(VolumePercent.ToDecimal(0.001f) == 0.1m, "小数の音量を表示する");
+
+settings.Save(headphones, 0.0001f);
+Assert(Math.Abs(settings.Find(headphones)!.Volume - 0.0001f) < VolumePolicy.ChangeTolerance,
+    "1%未満の音量を保存する");
 
 var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VolumeKeeperTests", Guid.NewGuid().ToString("N"));
 var store = new SettingsStore(System.IO.Path.Combine(directory, "settings.json"));
@@ -43,6 +49,8 @@ try
     var loaded = store.Load(out var warning);
     Assert(warning is null && loaded.Profiles.Count == 2, "設定を再起動後に読み戻せる");
     Assert(loaded.Find(updatedSpeaker)?.Volume == 0.25f, "保存音量を維持する");
+    Assert(Math.Abs(loaded.Find(headphones)!.Volume - 0.0001f) < VolumePolicy.ChangeTolerance,
+        "1%未満の音量を再起動後に読み戻せる");
     File.WriteAllText(store.Path, "{broken");
     var fallback = store.Load(out warning);
     Assert(fallback.Profiles.Count == 0 && warning is not null, "破損した設定で起動できる");

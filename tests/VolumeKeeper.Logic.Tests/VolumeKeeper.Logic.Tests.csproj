@@ -9,5 +9,6 @@
     <Compile Include="../../src/VolumeKeeper/DeviceInfo.cs" Link="DeviceInfo.cs" />
     <Compile Include="../../src/VolumeKeeper/Settings.cs" Link="Settings.cs" />
     <Compile Include="../../src/VolumeKeeper/VolumePolicy.cs" Link="VolumePolicy.cs" />
+    <Compile Include="../../src/VolumeKeeper/VolumePercent.cs" Link="VolumePercent.cs" />
   </ItemGroup>
 </Project>
