@@ -1,0 +1,39 @@
+# VolumeKeeper
+
+Windows 11 で、通常の再生用の出力機器ごとにマスター音量を記憶する常駐アプリです。スピーカーやイヤホンへ切り替えると、その機器に保存された音量を適用します。
+
+## 使い方
+
+1. `VolumeKeeper.exe` を起動します。初回起動時は設定画面が開きます。
+2. 機器を選び、Windows の音量操作で快適な音量に調整します。調整した値がその機器に自動保存されます。
+3. 次回から同じ機器へ切り替えると保存音量が適用されます。
+
+未登録の機器では音量を変更しません。音量を動かさずに登録したい場合は「現在の音量を保存」を押してください。設定画面を閉じても通知領域で動作し、通知領域のアイコンから設定を開いたり終了したりできます。ログイン時の自動起動と自動適用の一時停止は設定画面で切り替えられます。一時停止中も手動の音量変更は自動保存します。
+
+設定は `%LOCALAPPDATA%\VolumeKeeper\settings.json` に保存されます。
+
+## ビルド
+
+.NET 10 SDK を使用します。Windows 11 で次を実行してください。
+
+```powershell
+dotnet publish src/VolumeKeeper/VolumeKeeper.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+```
+
+`publish\VolumeKeeper.exe` を実行します。GitHub Actions の Windows ビルドでも配布用の実行ファイルを生成します。
+
+設定ロジックの確認:
+
+```powershell
+dotnet run --project tests/VolumeKeeper.Logic.Tests/VolumeKeeper.Logic.Tests.csproj -c Release
+```
+
+## 動作範囲
+
+- Windows の通常再生用の既定出力先（`eMultimedia`）を対象にします。通話用の出力先やアプリ別音量は扱いません。
+- アプリ起動時は、その時点の音量を維持します。保存音量は次の機器切り替え時に適用します。
+- ミュートは解除しません。機器本体に独立した音量操作がある場合、その値は管理できません。
+- 保存音量はユーザーが設定した値を直接適用します。新しい機器の音量を自動的に上げません。
+- Windows 11 24H2 以降で取得できる安定した機器 ID を優先します。取得できない場合は通常の出力先 ID を使うため、ドライバー更新後などに機器を再登録することがあります。
+
+詳しい仕様は [docs/spec.md](docs/spec.md) を参照してください。

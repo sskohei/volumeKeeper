@@ -1,0 +1,23 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Test settings logic
+        run: dotnet run --project tests/VolumeKeeper.Logic.Tests/VolumeKeeper.Logic.Tests.csproj -c Release
+      - name: Publish Windows app
+        run: dotnet publish src/VolumeKeeper/VolumeKeeper.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -o publish
+      - uses: actions/upload-artifact@v4
+        with:
+          name: VolumeKeeper-win-x64
+          path: publish/VolumeKeeper.exe

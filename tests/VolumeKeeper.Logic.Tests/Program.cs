@@ -1,0 +1,60 @@
+using VolumeKeeper;
+
+var speaker = new DeviceInfo { EndpointId = "endpoint-speaker", StableId = "stable-speaker", Name = "同じ名前" };
+var headphones = new DeviceInfo { EndpointId = "endpoint-headphones", StableId = "stable-headphones", Name = "同じ名前" };
+var settings = new AppSettings();
+settings.Save(speaker, 0.18f);
+settings.Save(headphones, 0.42f);
+Assert(settings.Profiles.Count == 2, "同名の機器は別々に保存する");
+Assert(settings.Find(speaker)?.Volume == 0.18f, "スピーカーの音量を取得する");
+Assert(settings.Find(headphones)?.Volume == 0.42f, "イヤホンの音量を取得する");
+
+var updatedSpeaker = new DeviceInfo
+{
+    EndpointId = "endpoint-speaker-after-update", StableId = "stable-speaker", Name = "新しい表示名"
+};
+settings.Save(updatedSpeaker, 0.25f);
+Assert(settings.Profiles.Count == 2, "安定IDでドライバー更新後の機器を対応付ける");
+Assert(settings.Find(updatedSpeaker)?.EndpointId == updatedSpeaker.EndpointId, "新しい出力先IDを保存する");
+Assert(settings.Find(updatedSpeaker)?.Name == "新しい表示名", "表示名を更新する");
+
+var sameNameOnly = new DeviceInfo { EndpointId = "unseen", Name = "同じ名前" };
+Assert(settings.Find(sameNameOnly) is null, "機器名だけでは対応付けない");
+var reusedEndpoint = new DeviceInfo
+{
+    EndpointId = updatedSpeaker.EndpointId, StableId = "different-stable-id", Name = "別の機器"
+};
+Assert(settings.Find(reusedEndpoint) is null, "安定IDが食い違う場合は音量を適用しない");
+
+Assert(!VolumePolicy.ShouldApplyOnSwitch(true, false, null, "speaker", false),
+    "アプリ起動時は保存音量を適用しない");
+Assert(VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "headphones", false),
+    "機器の切り替え時に保存音量を適用する");
+Assert(!VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "speaker", false),
+    "音声サービスの再接続では保存音量を再適用しない");
+Assert(!VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "headphones", true),
+    "一時停止中は保存音量を適用しない");
+
+var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VolumeKeeperTests", Guid.NewGuid().ToString("N"));
+var store = new SettingsStore(System.IO.Path.Combine(directory, "settings.json"));
+try
+{
+    store.Save(settings);
+    var loaded = store.Load(out var warning);
+    Assert(warning is null && loaded.Profiles.Count == 2, "設定を再起動後に読み戻せる");
+    Assert(loaded.Find(updatedSpeaker)?.Volume == 0.25f, "保存音量を維持する");
+    File.WriteAllText(store.Path, "{broken");
+    var fallback = store.Load(out warning);
+    Assert(fallback.Profiles.Count == 0 && warning is not null, "破損した設定で起動できる");
+}
+finally
+{
+    Directory.Delete(directory, recursive: true);
+}
+
+Console.WriteLine("VolumeKeeper logic tests passed.");
+
+static void Assert(bool condition, string message)
+{
+    if (!condition) throw new Exception(message);
+}
