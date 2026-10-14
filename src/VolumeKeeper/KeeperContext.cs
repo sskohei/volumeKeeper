@@ -10,7 +10,9 @@ internal sealed class KeeperContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _switchTimer = new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer _pollTimer = new() { Interval = 5000 };
     private readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = 300 };
+    private readonly System.Windows.Forms.Timer _levelTimer = new() { Interval = 200 };
     private AudioService? _audio;
+    private SessionLoudnessService? _normalizer;
     private string _status = "";
     private bool _exiting;
     private bool _hasInitialSnapshot;
@@ -28,6 +30,7 @@ internal sealed class KeeperContext : ApplicationContext
         _form.SaveProfileRequested += SaveProfile;
         _form.DeleteProfileRequested += DeleteProfile;
         _form.PauseChanged += SetPaused;
+        _form.AutoLevelChanged += SetAutoLevel;
         _form.StartupChanged += SetStartup;
         _ = _form.Handle;
 
@@ -49,6 +52,7 @@ internal sealed class KeeperContext : ApplicationContext
             RefreshAudio();
         };
         _pollTimer.Tick += (_, _) => RefreshAudio();
+        _levelTimer.Tick += (_, _) => AdjustSessionLevels();
         _saveTimer.Tick += (_, _) =>
         {
             _saveTimer.Stop();
@@ -57,6 +61,7 @@ internal sealed class KeeperContext : ApplicationContext
 
         RefreshAudio();
         _pollTimer.Start();
+        if (_settings.AutoLevelEnabled) _levelTimer.Start();
         _form.Show();
         if (_loadWarning is not null)
             MessageBox.Show(_form, _loadWarning, "VolumeKeeper", MessageBoxButtons.OK,
@@ -222,6 +227,53 @@ internal sealed class KeeperContext : ApplicationContext
         UpdateView();
     }
 
+    private void SetAutoLevel(bool enabled)
+    {
+        _settings.AutoLevelEnabled = enabled;
+        ScheduleSave();
+        if (enabled)
+        {
+            _status = "再生音の自動調整中。アプリごとのピーク音量を監視します。";
+            _levelTimer.Start();
+            AdjustSessionLevels();
+        }
+        else
+        {
+            _levelTimer.Stop();
+            StopNormalizer();
+            _status = "再生音の自動調整を停止しました。";
+        }
+        UpdateView();
+    }
+
+    private void AdjustSessionLevels()
+    {
+        var endpointId = _audio?.Current?.EndpointId;
+        if (endpointId is null)
+        {
+            StopNormalizer();
+            return;
+        }
+        try
+        {
+            _normalizer ??= new SessionLoudnessService();
+            _normalizer.Tick(endpointId);
+        }
+        catch (Exception error) when (error is System.Runtime.InteropServices.COMException or InvalidOperationException)
+        {
+            StopNormalizer();
+            _status = $"再生音を自動調整できません: {error.Message}";
+            UpdateView();
+        }
+    }
+
+    private void StopNormalizer()
+    {
+        try { _normalizer?.Dispose(); }
+        catch (System.Runtime.InteropServices.COMException) { }
+        _normalizer = null;
+    }
+
     private void SetStartup(bool enabled)
     {
         try
@@ -259,7 +311,7 @@ internal sealed class KeeperContext : ApplicationContext
         catch (UnauthorizedAccessException) { startup = false; }
         var current = _audio?.Current;
         _form.ShowState(current, current is null ? null : _settings.Find(current),
-            _settings.Profiles, _settings.Paused, startup, _status);
+            _settings.Profiles, _settings.Paused, _settings.AutoLevelEnabled, startup, _status);
         _tray.Text = _settings.Paused ? "VolumeKeeper（一時停止中）" : "VolumeKeeper";
     }
 
@@ -269,6 +321,8 @@ internal sealed class KeeperContext : ApplicationContext
         _pollTimer.Stop();
         _switchTimer.Stop();
         _saveTimer.Stop();
+        _levelTimer.Stop();
+        StopNormalizer();
         Persist();
         _audio?.Dispose();
         _tray.Visible = false;

@@ -37,6 +37,17 @@ Assert(!VolumePolicy.ShouldApplyOnSwitch(true, true, "speaker", "headphones", tr
 Assert(VolumePercent.ToDecimal(0.0001f) == 0.01m, "1%未満を正確に表示する");
 Assert(VolumePercent.ToDecimal(0.001f) == 0.1m, "小数の音量を表示する");
 
+var loudPeak = LoudnessPolicy.NextPeak(0, 0.8f);
+var quieter = LoudnessPolicy.NextVolume(1f, 1f, loudPeak, 0.8f);
+Assert(Math.Abs(quieter - 0.15f) < 0.0001f, "大きな音は目標ピークに合わせて下げる");
+Assert(LoudnessPolicy.NextVolume(1f, quieter, loudPeak, 0f) == quieter,
+    "無音中に音量を上げない");
+Assert(LoudnessPolicy.NextVolume(0.1f, 0.1f, 0.8f, 0.8f) == 0.1f,
+    "開始時のアプリ音量を上限として維持する");
+var recovered = LoudnessPolicy.NextVolume(1f, quieter, 0.2f, 0.2f);
+Assert(recovered > quieter && recovered <= quieter + LoudnessPolicy.RecoveryStep + 0.0001f,
+    "音量を上げるときは段階的に戻す");
+
 settings.Save(headphones, 0.0001f);
 Assert(Math.Abs(settings.Find(headphones)!.Volume - 0.0001f) < VolumePolicy.ChangeTolerance,
     "1%未満の音量を保存する");
@@ -45,9 +56,11 @@ var directory = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "VolumeKeep
 var store = new SettingsStore(System.IO.Path.Combine(directory, "settings.json"));
 try
 {
+    settings.AutoLevelEnabled = true;
     store.Save(settings);
     var loaded = store.Load(out var warning);
     Assert(warning is null && loaded.Profiles.Count == 2, "設定を再起動後に読み戻せる");
+    Assert(loaded.AutoLevelEnabled, "再生音の自動調整設定を読み戻せる");
     Assert(loaded.Find(updatedSpeaker)?.Volume == 0.25f, "保存音量を維持する");
     Assert(Math.Abs(loaded.Find(headphones)!.Volume - 0.0001f) < VolumePolicy.ChangeTolerance,
         "1%未満の音量を再起動後に読み戻せる");

@@ -28,6 +28,7 @@ internal sealed class SettingsForm : Form
     private readonly Button _deleteProfile;
     private readonly Button _saveCurrent;
     private readonly CheckBox _paused;
+    private readonly CheckBox _autoLevel;
     private readonly CheckBox _startup;
     private readonly ToolTip _deviceTip = new();
     private bool _refreshing;
@@ -40,6 +41,7 @@ internal sealed class SettingsForm : Form
     public event Action<DeviceProfile, float>? SaveProfileRequested;
     public event Action<DeviceProfile>? DeleteProfileRequested;
     public event Action<bool>? PauseChanged;
+    public event Action<bool>? AutoLevelChanged;
     public event Action<bool>? StartupChanged;
 
     public SettingsForm()
@@ -84,7 +86,10 @@ internal sealed class SettingsForm : Form
         _saveProfile = Button("保存音量を変更", 185);
         _deleteProfile = Button("選択した設定を削除", 220, secondary: true);
         _saveCurrent = Button("現在の音量を保存", 210);
-        _paused = CheckBox("自動適用を一時停止");
+        _paused = CheckBox("機器切替時の自動適用を一時停止");
+        _autoLevel = CheckBox("再生音を自動調整");
+        _deviceTip.SetToolTip(_autoLevel,
+            "再生中の音のピークを測り、音の大きいアプリを自動で下げます。静かな音の増幅はできません。");
         _startup = CheckBox("Windows ログイン時に起動");
 
         var titleHeight = DotFont(24).Height + 16;
@@ -98,7 +103,7 @@ internal sealed class SettingsForm : Form
             currentBottomHeight + currentFineHeight;
         var profilesTitleHeight = DotFont(14).Height + 12;
         var actionsHeight = Math.Max(_profileVolume.Height, _saveProfile.Height) + 18;
-        var optionsHeight = Math.Max(64, DotFont(11).Height + 24) + 14;
+        var optionsHeight = Math.Max(90, DotFont(11).Height * 2 + 24) + 14;
         var statusHeight = DotFont(11).Height + 20;
         var working = Screen.FromPoint(Cursor.Position).WorkingArea;
         var minimumWidth = Math.Max(840,
@@ -221,6 +226,7 @@ internal sealed class SettingsForm : Form
         options.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
         options.Controls.Add(_paused, 0, 0);
         options.Controls.Add(_startup, 1, 0);
+        options.Controls.Add(_autoLevel, 0, 1);
         optionsCard.Controls.Add(options);
         root.Controls.Add(optionsCard, 0, 3);
 
@@ -251,6 +257,10 @@ internal sealed class SettingsForm : Form
         {
             if (!_refreshing) PauseChanged?.Invoke(_paused.Checked);
         };
+        _autoLevel.CheckedChanged += (_, _) =>
+        {
+            if (!_refreshing) AutoLevelChanged?.Invoke(_autoLevel.Checked);
+        };
         _startup.CheckedChanged += (_, _) =>
         {
             if (!_refreshing) StartupChanged?.Invoke(_startup.Checked);
@@ -269,7 +279,7 @@ internal sealed class SettingsForm : Form
 
     public void ShowState(DeviceInfo? current, DeviceProfile? currentProfile,
         IReadOnlyList<DeviceProfile> profiles,
-        bool paused, bool startup, string status)
+        bool paused, bool autoLevel, bool startup, string status)
     {
         _refreshing = true;
         try
@@ -307,6 +317,7 @@ internal sealed class SettingsForm : Form
             finally { _profiles.EndUpdate(); }
 
             _paused.Checked = paused;
+            _autoLevel.Checked = autoLevel;
             _startup.Checked = startup;
             UpdateSelection();
             if (editingProfile.HasValue && ReferenceEquals(SelectedProfile, selected))

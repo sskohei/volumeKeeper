@@ -13,6 +13,7 @@ internal sealed class DeviceProfile
 internal sealed class AppSettings
 {
     public bool Paused { get; set; }
+    public bool AutoLevelEnabled { get; set; }
     public List<DeviceProfile> Profiles { get; set; } = [];
 
     public DeviceProfile? Find(DeviceInfo device)
