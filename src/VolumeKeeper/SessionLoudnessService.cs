@@ -72,21 +72,11 @@ internal sealed class SessionLoudnessService : IDisposable
         present.Add(id);
 
         session.GetState(out var state);
-        if (state != 1)
+        if (state == 2)
         {
-            // Restore an application before its inactive session disappears.
-            if (_levels.Remove(id, out var previous))
-            {
-                volume.GetMasterVolume(out var currentVolume);
-                if (Math.Abs(currentVolume - previous.Applied) <= 0.005f)
-                {
-                    var restoreEvent = OwnEvent;
-                    volume.SetMasterVolume(previous.Baseline, ref restoreEvent);
-                }
-            }
+            _levels.Remove(id);
             return;
         }
-
         volume.GetMute(out var muted);
         volume.GetMasterVolume(out var actual);
         if (!_levels.TryGetValue(id, out var level))
@@ -101,6 +91,23 @@ internal sealed class SessionLoudnessService : IDisposable
             level.Applied = actual;
         }
 
+        if (!muted && !level.Prepared)
+        {
+            // Prime even inactive sessions so their first sound is attenuated.
+            var initial = LoudnessPolicy.InitialVolume(level.Baseline);
+            if (Math.Abs(initial - actual) >= 0.005f)
+            {
+                var initialEvent = OwnEvent;
+                volume.SetMasterVolume(initial, ref initialEvent);
+                level.Applied = initial;
+                actual = initial;
+            }
+            level.Prepared = true;
+        }
+
+        // Keep the adjusted level while playback is paused. Restoring here made
+        // the next play start at full volume until the following meter tick.
+        if (state != 1) return;
         if (muted || actual <= 0f) return;
         meter.GetPeakValue(out var peak);
         level.Peak = LoudnessPolicy.NextPeak(level.Peak, peak);
@@ -168,5 +175,6 @@ internal sealed class SessionLoudnessService : IDisposable
         public float Baseline = baseline;
         public float Applied = baseline;
         public float Peak;
+        public bool Prepared;
     }
 }

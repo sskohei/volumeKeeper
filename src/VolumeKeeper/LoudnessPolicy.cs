@@ -9,6 +9,10 @@ internal static class LoudnessPolicy
     public const float PeakDecay = 0.95f;
     public const float RecoveryStep = 0.015f;
 
+    // A new session can start playing before its first peak has been measured.
+    // Start it at a safe level, then let NextVolume recover if it is quiet.
+    public static float InitialVolume(float baseline) => Math.Min(baseline, TargetPeak);
+
     public static float NextPeak(float previous, float measured) =>
         Math.Max(Math.Clamp(measured, 0f, 1f), previous * PeakDecay);
 

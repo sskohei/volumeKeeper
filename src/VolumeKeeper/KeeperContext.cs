@@ -10,7 +10,7 @@ internal sealed class KeeperContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _switchTimer = new() { Interval = 250 };
     private readonly System.Windows.Forms.Timer _pollTimer = new() { Interval = 5000 };
     private readonly System.Windows.Forms.Timer _saveTimer = new() { Interval = 300 };
-    private readonly System.Windows.Forms.Timer _levelTimer = new() { Interval = 200 };
+    private readonly System.Windows.Forms.Timer _levelTimer = new() { Interval = 50 };
     private AudioService? _audio;
     private SessionLoudnessService? _normalizer;
     private string _status = "";
@@ -61,7 +61,11 @@ internal sealed class KeeperContext : ApplicationContext
 
         RefreshAudio();
         _pollTimer.Start();
-        if (_settings.AutoLevelEnabled) _levelTimer.Start();
+        if (_settings.AutoLevelEnabled)
+        {
+            AdjustSessionLevels();
+            _levelTimer.Start();
+        }
         _form.Show();
         if (_loadWarning is not null)
             MessageBox.Show(_form, _loadWarning, "VolumeKeeper", MessageBoxButtons.OK,

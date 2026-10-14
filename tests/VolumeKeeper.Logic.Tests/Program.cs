@@ -39,6 +39,12 @@ Assert(VolumePercent.ToDecimal(0.0001f) == 0.01m, "1%未満を正確に表示す
 Assert(VolumePercent.ToDecimal(0.001f) == 0.1m, "小数の音量を表示する");
 
 var loudPeak = LoudnessPolicy.NextPeak(0, 0.8f);
+Assert(LoudnessPolicy.InitialVolume(1f) == LoudnessPolicy.TargetPeak,
+    "新しいセッションは最初のピーク測定前から音量を抑える");
+Assert(LoudnessPolicy.InitialVolume(0.08f) == 0.08f,
+    "元から小さいアプリ音量は上げない");
+Assert(LoudnessPolicy.NextVolume(1f, LoudnessPolicy.InitialVolume(1f), 0f, 0f) ==
+       LoudnessPolicy.TargetPeak, "再生前の無音中は安全な音量を維持する");
 var quieter = LoudnessPolicy.NextVolume(1f, 1f, loudPeak, 0.8f);
 Assert(Math.Abs(quieter - 0.15f) < 0.0001f, "大きな音は目標ピークに合わせて下げる");
 Assert(LoudnessPolicy.NextVolume(1f, quieter, loudPeak, 0f) == quieter,
