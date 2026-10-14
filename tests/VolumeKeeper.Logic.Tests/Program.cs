@@ -1,4 +1,5 @@
 using VolumeKeeper;
+using System.Reflection;
 
 var speaker = new DeviceInfo { EndpointId = "endpoint-speaker", StableId = "stable-speaker", Name = "同じ名前" };
 var headphones = new DeviceInfo { EndpointId = "endpoint-headphones", StableId = "stable-headphones", Name = "同じ名前" };
@@ -47,6 +48,25 @@ Assert(LoudnessPolicy.NextVolume(0.1f, 0.1f, 0.8f, 0.8f) == 0.1f,
 var recovered = LoudnessPolicy.NextVolume(1f, quieter, 0.2f, 0.2f);
 Assert(recovered > quieter && recovered <= quieter + LoudnessPolicy.RecoveryStep + 0.0001f,
     "音量を上げるときは段階的に戻す");
+
+var baseMethods = typeof(IAudioSessionControl).GetMethods(BindingFlags.Public |
+    BindingFlags.Instance | BindingFlags.DeclaredOnly).OrderBy(method => method.MetadataToken).ToArray();
+var derivedMethods = typeof(IAudioSessionControl2).GetMethods(BindingFlags.Public |
+    BindingFlags.Instance | BindingFlags.DeclaredOnly).OrderBy(method => method.MetadataToken).ToArray();
+Assert(baseMethods.Length == 9 && derivedMethods.Length == 14,
+    "COM 音声セッションの継承メソッドを vtable に再宣言する");
+for (var index = 0; index < baseMethods.Length; index++)
+{
+    var original = baseMethods[index];
+    var redeclared = derivedMethods[index];
+    Assert(original.Name == redeclared.Name &&
+        original.GetParameters().Select(parameter => parameter.ParameterType).SequenceEqual(
+            redeclared.GetParameters().Select(parameter => parameter.ParameterType)),
+        $"COM vtable のスロット {index + 3} が一致する");
+}
+Assert(derivedMethods[10].Name == "GetSessionInstanceIdentifier" &&
+       derivedMethods[12].Name == "IsSystemSoundsSession",
+    "拡張メソッドは継承メソッドの後に並ぶ");
 
 settings.Save(headphones, 0.0001f);
 Assert(Math.Abs(settings.Find(headphones)!.Volume - 0.0001f) < VolumePolicy.ChangeTolerance,

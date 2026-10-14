@@ -11,5 +11,6 @@
     <Compile Include="../../src/VolumeKeeper/VolumePolicy.cs" Link="VolumePolicy.cs" />
     <Compile Include="../../src/VolumeKeeper/VolumePercent.cs" Link="VolumePercent.cs" />
     <Compile Include="../../src/VolumeKeeper/LoudnessPolicy.cs" Link="LoudnessPolicy.cs" />
+    <Compile Include="../../src/VolumeKeeper/AudioSessionInterop.cs" Link="AudioSessionInterop.cs" />
   </ItemGroup>
 </Project>
